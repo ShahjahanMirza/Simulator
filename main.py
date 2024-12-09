@@ -19,56 +19,64 @@ st.title("Supermarket POS Customer Simulation")
 # Load Data
 @st.cache_data
 def load_data():
+    """
+    Loads and preprocesses POS data from a CSV file.
+
+    Returns:
+        pd.DataFrame: Processed POS data with 'service_time' and 'wait_time' columns.
+    """
     try:
         data = pd.read_csv("data/pos_data.csv")
     except FileNotFoundError:
-        st.error("The file 'data/pos_data.csv' was not found.")
+        st.error("The file 'data/pos_data.csv' was not found in the 'data/' directory.")
         st.stop()
     except Exception as e:
         st.error(f"An error occurred while reading the data: {e}")
         st.stop()
-    
+
     # Identify the correct time columns based on your data
     time_columns = ['arrival', 'service start', 'service end']
-    
+
     for col in time_columns:
         if col in data.columns:
             # Attempt to parse with seconds first
             data[col] = pd.to_datetime(data[col], format='%I:%M:%S %p', errors='coerce')
-            
+
             # If parsing failed, try without seconds
             if data[col].isna().any():
                 data[col] = pd.to_datetime(data[col], format='%I:%M %p', errors='coerce')
-            
+
             # Final check for any NaT values
             if data[col].isna().any():
                 st.warning(f"Some entries in '{col}' could not be parsed and were set to NaT.")
         else:
             st.error(f"Column '{col}' not found in the data.")
             st.stop()
-    
-    # Calculate service_time and wait_time in data
+
+    # Calculate 'service_time' and 'wait_time' in data
     if all(col in data.columns for col in ['service start', 'service end', 'arrival']):
         data['service_time'] = (data['service end'] - data['service start']).dt.total_seconds() / 60
         data['wait_time'] = (data['service start'] - data['arrival']).dt.total_seconds() / 60
-        
+
         # Replace negative wait times with 0
-        data['wait_time'] = data['wait_time'].apply(lambda x: x if x >=0 else 0)
-        
+        data['wait_time'] = data['wait_time'].apply(lambda x: x if x >= 0 else 0)
+
         # Replace NaN wait_time and service_time with 0
         data['wait_time'] = data['wait_time'].fillna(0)
         data['service_time'] = data['service_time'].fillna(0)
     else:
-        st.error("Required columns for calculating service_time and wait_time are missing.")
+        st.error("Required columns for calculating 'service_time' and 'wait_time' are missing.")
         st.stop()
-    
+
     return data
 
+# Load the POS data
 data = load_data()
 
-# Debugging: Show data after processing
-st.subheader("Processed POS Data (First 5 Rows)")
-st.write(data.head())
+# Display processed data for debugging (optional)
+if st.checkbox("Show Processed POS Data"):
+    st.subheader("Processed POS Data (First 5 Rows)")
+    st.dataframe(data.head())
 
 # Sidebar for Simulation Parameters
 st.sidebar.header("Simulation Parameters")
@@ -88,7 +96,7 @@ if model_choice in ["M/M/c", "M/G/1"]:
         key="num_servers"
     )
 else:
-    num_servers = 1
+    num_servers = 1  # Default to 1 server for M/M/1
 
 # 3. Arrival Distribution
 arrival_dist_options = ["Exponential", "Uniform", "Normal"]
@@ -223,6 +231,9 @@ def get_service_time():
 
 # Simulation Environment
 class Customer:
+    """
+    Represents a customer in the simulation.
+    """
     def __init__(self, env, name, server_store):
         self.env = env
         self.name = name
@@ -234,6 +245,9 @@ class Customer:
         self.end_time = 0
 
     def process(self):
+        """
+        Simulates the customer's experience in the queue and service.
+        """
         arrival_time = self.env.now
         # Request a server by getting a server ID from the store
         server_id = yield self.server_store.get()
@@ -250,11 +264,17 @@ class Customer:
 
 # Function to initialize the server store
 def init_server_store(env, server_store, num_servers):
+    """
+    Initializes the server store with server IDs.
+    """
     for i in range(1, num_servers + 1):
         yield server_store.put(i)
 
 # Helper function to create a customer process
 def create_customer(env, i, arrival_time, server_store, customers):
+    """
+    Creates and processes a customer.
+    """
     yield env.timeout(arrival_time - env.now)
     customer = Customer(env, f"C{i}", server_store)
     customers.append(customer)
@@ -262,16 +282,25 @@ def create_customer(env, i, arrival_time, server_store, customers):
 
 # Function to run the simulation
 def run_simulation():
+    """
+    Runs the simulation environment.
+
+    Returns:
+        dict: Simulation metrics.
+        list: Wait times.
+        list: Service times.
+        list: Total times in system.
+        list: Customer objects.
+    """
     env = simpy.Environment()
     server_store = simpy.Store(env, capacity=num_servers)
     # Initialize the server store with server IDs
     env.process(init_server_store(env, server_store, num_servers))
     
     customers = []
-    # Start arrivals at time=0
+    # Generate customer arrivals
     arrival_times = [0]
     
-    # Generate customer arrivals
     while arrival_times[-1] < sim_time:
         inter_arrival = get_interarrival_time()
         next_arrival = arrival_times[-1] + inter_arrival
@@ -335,7 +364,7 @@ if run_sim:
     metrics_df = pd.DataFrame(metrics.items(), columns=["Metric", "Value"])
     st.table(metrics_df)
 
-    # Utilization Graph
+    # Service Time Distribution
     st.subheader("Service Time Distribution (Simulation)")
     if service_times_sim:
         fig, ax = plt.subplots(figsize=(10, 4))
@@ -384,8 +413,8 @@ if run_sim:
                     title="Gantt Chart of Customer Service",
                     showlegend=False
                 )
-                # Use a separate container to prevent resetting the app
-                with st.container():
+                # Display the Gantt chart within an expander to prevent app resets
+                with st.expander("View Gantt Chart"):
                     st.plotly_chart(fig_gantt, use_container_width=True)
             else:
                 st.write("No data available for Gantt Chart.")
@@ -454,7 +483,7 @@ if run_sim:
 
         # Check if data_mean_wait or data_mean_service is NaN
         if np.isnan(data_mean_wait) or np.isnan(data_mean_service):
-            st.error("Cannot compute mean wait_time or service_time from the data.")
+            st.error("Cannot compute mean 'wait_time' or 'service_time' from the data.")
         else:
             # Simulation mean wait time and service time from metrics
             sim_mean_wait = metrics.get("System Wq (Avg Wait Time)", 0)
