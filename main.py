@@ -34,9 +34,9 @@ if 'total_times' not in st.session_state:
 @st.cache_data
 def load_data():
     try:
-        data = pd.read_csv("data/pos_data.csv")
+        data = pd.read_csv("./pos_data.csv")
     except FileNotFoundError:
-        st.error("The file 'data/pos_data.csv' was not found.")
+        st.error("The file './pos_data.csv' was not found.")
         st.stop()
     except Exception as e:
         st.error(f"An error occurred while reading the data: {e}")
