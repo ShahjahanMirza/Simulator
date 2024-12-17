@@ -105,8 +105,8 @@ else:
 arrival_dist_options = ["Exponential", "Uniform", "Normal"]
 arrival_dist_choice = st.sidebar.selectbox("Arrival Time Distribution", arrival_dist_options, key="arrival_distribution")
 
-# Arrival Distribution Parameters
-st.sidebar.subheader("Arrival Distribution Parameters")
+# Inter Arrival Distribution Parameters
+st.sidebar.subheader("Inter Arrival Distribution Parameters")
 if arrival_dist_choice == "Exponential":
     arrival_lambda = st.sidebar.number_input(
         "Lambda (λ)", 
