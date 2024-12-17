@@ -14,6 +14,18 @@ st.set_page_config(page_title="Supermarket POS Customer Simulation", layout="wid
 # Title
 st.title("Supermarket POS Customer Simulation")
 
+# Initialize Session State for Simulation Results
+if 'metrics' not in st.session_state:
+    st.session_state.metrics = None
+if 'customers' not in st.session_state:
+    st.session_state.customers = None
+if 'wait_times' not in st.session_state:
+    st.session_state.wait_times = None
+if 'service_times_sim' not in st.session_state:
+    st.session_state.service_times_sim = None
+if 'total_times' not in st.session_state:
+    st.session_state.total_times = None
+
 # Load Data
 @st.cache_data
 def load_data():
@@ -46,7 +58,8 @@ def load_data():
             st.stop()
 
     # Calculate service_time and wait_time in data
-    if all(col in data.columns for col in ['service start', 'service end', 'arrival']):
+    required_columns = ['service start', 'service end', 'arrival']
+    if all(col in data.columns for col in required_columns):
         data['service_time'] = (data['service end'] - data['service start']).dt.total_seconds() / 60
         data['wait_time'] = (data['service start'] - data['arrival']).dt.total_seconds() / 60
 
@@ -120,6 +133,9 @@ elif arrival_dist_choice == "Uniform":
         step=0.1,
         key="arrival_high_uniform"
     )
+    # Validation: Ensure High > Low
+    if arrival_high <= arrival_low:
+        st.sidebar.error("High must be greater than Low for Uniform Distribution.")
 elif arrival_dist_choice == "Normal":
     arrival_mu = st.sidebar.number_input(
         "Mean (μ)", 
@@ -170,6 +186,9 @@ elif service_dist_choice == "Uniform":
         step=0.1,
         key="service_high_uniform"
     )
+    # Validation: Ensure High > Low
+    if service_high <= service_low:
+        st.sidebar.error("High must be greater than Low for Uniform Distribution.")
 elif service_dist_choice == "Normal":
     service_mu = st.sidebar.number_input(
         "Mean (μ)", 
@@ -330,18 +349,25 @@ def run_simulation():
 if run_sim:
     with st.spinner("Running simulation..."):
         metrics, wait_times, service_times_sim, total_times, customers = run_simulation()
+        # Store simulation results in session_state
+        st.session_state.metrics = metrics
+        st.session_state.wait_times = wait_times
+        st.session_state.service_times_sim = service_times_sim
+        st.session_state.total_times = total_times
+        st.session_state.customers = customers
     st.success("Simulation Completed!")
 
-    # Display Metrics
+# Display Metrics if available
+if st.session_state.metrics:
     st.subheader("Simulation Metrics")
-    metrics_df = pd.DataFrame(metrics.items(), columns=["Metric", "Value"])
+    metrics_df = pd.DataFrame(st.session_state.metrics.items(), columns=["Metric", "Value"])
     st.table(metrics_df)
 
     # Utilization Graph
     st.subheader("Service Time Distribution (Simulation)")
-    if service_times_sim:
+    if st.session_state.service_times_sim:
         fig, ax = plt.subplots(figsize=(10, 4))
-        sns.histplot(service_times_sim, bins=20, kde=True, ax=ax, color='skyblue')
+        sns.histplot(st.session_state.service_times_sim, bins=20, kde=True, ax=ax, color='skyblue')
         ax.set_xlabel("Service Time (minutes)")
         ax.set_ylabel("Frequency")
         ax.set_title("Service Time Distribution (Simulation)")
@@ -356,7 +382,7 @@ if run_sim:
         try:
             gantt_data = []
             base_time = datetime(2024, 1, 1, 8, 0, 0)  # Arbitrary base time
-            for c in customers:
+            for c in st.session_state.customers:
                 # Ensure that start_time and end_time are valid
                 if c.end_time >= c.start_time:
                     start_time = base_time + timedelta(minutes=c.start_time)
@@ -401,7 +427,7 @@ if run_sim:
         num_bins = 10
 
         # Create histograms
-        sim_hist, bin_edges = np.histogram(service_times_sim, bins=num_bins)
+        sim_hist, bin_edges = np.histogram(st.session_state.service_times_sim, bins=num_bins)
         data_service_times = data['service_time'].dropna()
         data_hist, _ = np.histogram(data_service_times, bins=bin_edges)
 
@@ -459,8 +485,8 @@ if run_sim:
             st.error("Cannot compute mean wait_time or service_time from the data.")
         else:
             # Simulation mean wait time and service time from metrics
-            sim_mean_wait = metrics.get("System Wq (Avg Wait Time)", 0)
-            sim_mean_service = metrics.get("System W (Avg Time in System)", 0)
+            sim_mean_wait = st.session_state.metrics.get("System Wq (Avg Wait Time)", 0)
+            sim_mean_service = st.session_state.metrics.get("System W (Avg Time in System)", 0)
 
             comparison_df = pd.DataFrame({
                 "Metric": ["Average Wait Time (minutes)", "Average Service Time (minutes)"],
