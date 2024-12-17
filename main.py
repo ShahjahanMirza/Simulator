@@ -213,7 +213,7 @@ elif service_dist_choice == "Normal":
 
 # 5. Simulation Time
 sim_time = st.sidebar.number_input(
-    "Total Simulation Time (minutes)", 
+    "Total Simulation Time (minutes)": round(total_simulation_time, 2), 
     min_value=10, 
     max_value=1000, 
     value=10,  # Adjusted to 10 as per user parameters
@@ -315,13 +315,13 @@ def run_simulation():
 
     # Server Utilization
     total_busy_time = sum(service_times_sim)
-    utilization = (total_busy_time) / (num_servers * sim_time) * 100
+    utilization = (total_busy_time) / (num_servers * total_simulation_time) * 100
 
     # Metrics Calculation
     system_efficiency = utilization
     system_idle_time = 100 - utilization
-    L = len(customers) / sim_time  # Average number in system
-    Lq = sum(wait_times) / sim_time  # Average queue length
+    L = len(customers) / total_simulation_time  # Average number in system
+    Lq = sum(wait_times) / total_simulation_time  # Average queue length
     W = np.mean(total_times) if total_times else 0  # Average time in system
     Wq = np.mean(wait_times) if wait_times else 0  # Average wait time
     arrival_rate = len(customers) / sim_time  # λ
