@@ -78,8 +78,8 @@ def load_data():
 data = load_data()
 
 # Debugging: Show data after processing
-st.subheader("Processed POS Data (First 5 Rows)")
-st.write(data.head())
+#st.subheader("Processed POS Data (First 5 Rows)")
+#st.write(data.head())
 
 # Sidebar for Simulation Parameters
 st.sidebar.header("Simulation Parameters")
