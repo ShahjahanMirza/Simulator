@@ -34,9 +34,9 @@ if 'total_times' not in st.session_state:
 @st.cache_data
 def load_data():
     try:
-        data = pd.read_csv("./pos_data.csv")
+        data = pd.read_csv("data/pos_data.csv")
     except FileNotFoundError:
-        st.error("The file './pos_data.csv' was not found.")
+        st.error("The file 'data/pos_data.csv' was not found.")
         st.stop()
     except Exception as e:
         st.error(f"An error occurred while reading the data: {e}")
@@ -216,7 +216,7 @@ sim_time = st.sidebar.number_input(
     "Total Simulation Time (minutes)", 
     min_value=10, 
     max_value=1000, 
-    value=60, 
+    value=10,  # Adjusted to 10 as per user parameters
     step=10,
     key="simulation_time"
 )
@@ -309,9 +309,9 @@ def run_simulation():
     env.run()
 
     # Collect Metrics
-    wait_times = [c.wait_time for c in customers if c.arrival_time <= sim_time]
-    service_times_sim = [c.service_time for c in customers if c.arrival_time <= sim_time]
-    total_times = [c.wait_time + c.service_time for c in customers if c.arrival_time <= sim_time]
+    wait_times = [c.wait_time for c in customers]
+    service_times_sim = [c.service_time for c in customers]
+    total_times = [c.wait_time + c.service_time for c in customers]
 
     # Server Utilization
     total_busy_time = sum(service_times_sim)
@@ -347,27 +347,22 @@ def run_simulation():
     return metrics, wait_times, service_times_sim, total_times, customers
 
 # Function to save customer data to Excel
-def save_customer_data(customers, sim_time):
+def save_customer_data(customers):
     # Prepare data
     customer_records = []
     for c in customers:
-        if c.arrival_time <= sim_time:
-            record = {
-                "Name": c.name,
-                "Server ID": c.server_id,
-                "Arrival Time (min)": round(c.arrival_time, 2),
-                "Service Start Time (min)": round(c.start_time, 2),
-                "Service End Time (min)": round(c.end_time, 2),
-                "Wait Time (min)": round(c.wait_time, 2),
-                "Service Time (min)": round(c.service_time, 2)
-            }
-            customer_records.append(record)
+        record = {
+            "Name": c.name,
+            "Server ID": c.server_id,
+            "Arrival Time (min)": round(c.arrival_time, 2),
+            "Service Start Time (min)": round(c.start_time, 2),
+            "Service End Time (min)": round(c.end_time, 2),
+            "Wait Time (min)": round(c.wait_time, 2),
+            "Service Time (min)": round(c.service_time, 2)
+        }
+        customer_records.append(record)
 
     df_customers = pd.DataFrame(customer_records)
-
-    if df_customers.empty:
-        st.warning("No customer data to save.")
-        return
 
     # Generate filename with current datetime
     current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -393,208 +388,194 @@ if run_sim:
     st.success("Simulation Completed!")
 
     # Save Customer Data to Excel
-    save_customer_data(customers, sim_time)
+    save_customer_data(customers)
 
     # Prepare data for download
     try:
         # Combine all customer data into a DataFrame
         customer_records = []
         for c in st.session_state.customers:
-            if c.arrival_time <= sim_time:
-                record = {
-                    "Name": c.name,
-                    "Server ID": c.server_id,
-                    "Arrival Time (min)": round(c.arrival_time, 2),
-                    "Service Start Time (min)": round(c.start_time, 2),
-                    "Service End Time (min)": round(c.end_time, 2),
-                    "Wait Time (min)": round(c.wait_time, 2),
-                    "Service Time (min)": round(c.service_time, 2)
-                }
-                customer_records.append(record)
+            record = {
+                "Name": c.name,
+                "Server ID": c.server_id,
+                "Arrival Time (min)": round(c.arrival_time, 2),
+                "Service Start Time (min)": round(c.start_time, 2),
+                "Service End Time (min)": round(c.end_time, 2),
+                "Wait Time (min)": round(c.wait_time, 2),
+                "Service Time (min)": round(c.service_time, 2)
+            }
+            customer_records.append(record)
 
         df_customers = pd.DataFrame(customer_records)
 
-        if df_customers.empty:
-            st.warning("No customer data available for download.")
-        else:
-            # Convert DataFrame to Excel in memory
-            output = BytesIO()
-            df_customers.to_excel(output, index=False)
-            excel_data = output.getvalue()
+        # Convert DataFrame to Excel in memory
+        output = BytesIO()
+        df_customers.to_excel(output, index=False)
+        excel_data = output.getvalue()
 
-            # Generate download button with current datetime in filename
-            download_filename = f"customer_data_{current_datetime}.xlsx"
+        # Generate download button with current datetime in filename
+        download_filename = f"customer_data_{current_datetime}.xlsx"
 
-            st.download_button(
-                label="Download Customer Data as Excel",
-                data=excel_data,
-                file_name=download_filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        st.download_button(
+            label="Download Customer Data as Excel",
+            data=excel_data,
+            file_name=download_filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     except Exception as e:
         st.error(f"An error occurred while preparing the download: {e}")
 
-    # Display Metrics if available
-    if st.session_state.metrics:
-        st.subheader("Simulation Metrics")
-        metrics_df = pd.DataFrame(st.session_state.metrics.items(), columns=["Metric", "Value"])
-        st.table(metrics_df)
+# Display Metrics if available
+if st.session_state.metrics:
+    st.subheader("Simulation Metrics")
+    metrics_df = pd.DataFrame(st.session_state.metrics.items(), columns=["Metric", "Value"])
+    st.table(metrics_df)
 
-        # Utilization Graph
-        st.subheader("Service Time Distribution (Simulation)")
-        if st.session_state.service_times_sim:
-            fig, ax = plt.subplots(figsize=(10, 4))
-            sns.histplot(st.session_state.service_times_sim, bins=20, kde=True, ax=ax, color='skyblue')
-            ax.set_xlabel("Service Time (minutes)")
-            ax.set_ylabel("Frequency")
-            ax.set_title("Service Time Distribution (Simulation)")
-            st.pyplot(fig)
-        else:
-            st.write("No service time data available for visualization.")
+    # Utilization Graph
+    st.subheader("Service Time Distribution (Simulation)")
+    if st.session_state.service_times_sim:
+        fig, ax = plt.subplots(figsize=(10, 4))
+        sns.histplot(st.session_state.service_times_sim, bins=20, kde=True, ax=ax, color='skyblue')
+        ax.set_xlabel("Service Time (minutes)")
+        ax.set_ylabel("Frequency")
+        ax.set_title("Service Time Distribution (Simulation)")
+        st.pyplot(fig)
+    else:
+        st.write("No service time data available for visualization.")
 
-        # Gantt Chart (Optional)
-        gantt_checkbox = st.checkbox("Show Gantt Chart")
-        if gantt_checkbox:
-            st.subheader("Gantt Chart of Customer Service")
-            try:
-                gantt_data = []
-                base_time = datetime(2024, 1, 1, 8, 0, 0)  # Arbitrary base time
-                for c in st.session_state.customers:
-                    # Ensure that start_time and end_time are valid
-                    if c.end_time >= c.start_time and c.arrival_time <= sim_time:
-                        start_time = base_time + timedelta(minutes=c.start_time)
-                        finish_time = base_time + timedelta(minutes=c.end_time)
-                        gantt_data.append({
-                            "Task": c.name,
-                            "Start": start_time,
-                            "Finish": finish_time,
-                            "Resource": f"Server {c.server_id}"
-                        })
-
-                if gantt_data:
-                    df_gantt = pd.DataFrame(gantt_data)
-                    fig_gantt = px.timeline(
-                        df_gantt, 
-                        x_start='Start', 
-                        x_end='Finish', 
-                        y='Resource', 
-                        color='Resource', 
-                        hover_name='Task',
-                        title='Gantt Chart of Customer Service'
-                    )
-                    fig_gantt.update_yaxes(categoryorder='total ascending')
-                    fig_gantt.update_layout(
-                        xaxis_title="Time",
-                        yaxis_title="Server",
-                        title="Gantt Chart of Customer Service",
-                        showlegend=False
-                    )
-                    # Use a separate container to prevent resetting the app
-                    with st.container():
-                        st.plotly_chart(fig_gantt, use_container_width=True)
-                else:
-                    st.write("No data available for Gantt Chart.")
-            except Exception as e:
-                st.error(f"An error occurred while generating the Gantt Chart: {e}")
-
-        # Chi-square Test
-        st.subheader("Chi-square Test")
+    # Gantt Chart (Optional)
+    gantt_checkbox = st.checkbox("Show Gantt Chart")
+    if gantt_checkbox:
+        st.subheader("Gantt Chart of Customer Service")
         try:
-            # Define number of bins based on data size
-            num_bins = min(10, len(service_times_sim) - 1) if len(service_times_sim) > 1 else 1
+            gantt_data = []
+            base_time = datetime(2024, 1, 1, 8, 0, 0)  # Arbitrary base time
+            for c in st.session_state.customers:
+                # Ensure that start_time and end_time are valid
+                if c.end_time >= c.start_time:
+                    start_time = base_time + timedelta(minutes=c.start_time)
+                    finish_time = base_time + timedelta(minutes=c.end_time)
+                    gantt_data.append({
+                        "Task": c.name,
+                        "Start": start_time,
+                        "Finish": finish_time,
+                        "Resource": f"Server {c.server_id}"
+                    })
 
-            if num_bins < 1:
-                st.warning("Not enough data points to perform Chi-square Test.")
-            else:
-                # Create histograms
-                sim_hist, bin_edges = np.histogram(st.session_state.service_times_sim, bins=num_bins)
-                data_service_times = data['service_time'].dropna()
-                data_hist, _ = np.histogram(data_service_times, bins=bin_edges)
-
-                # Check if data_hist.sum() is zero
-                if data_hist.sum() == 0:
-                    st.error("No service time data available for Chi-square Test.")
-                else:
-                    # Scale data_hist to have the same total as sim_hist
-                    scale_factor = sim_hist.sum() / data_hist.sum()
-                    f_exp = data_hist * scale_factor
-
-                    # Round f_exp to nearest integer
-                    f_exp = np.round(f_exp).astype(int)
-
-                    # Adjust the difference to make sums equal
-                    difference = sim_hist.sum() - f_exp.sum()
-                    if difference > 0:
-                        # Add the difference to the bin with the highest expected frequency
-                        f_exp[np.argmax(f_exp)] += difference
-                    elif difference < 0:
-                        # Subtract the difference from the bin with the highest expected frequency
-                        f_exp[np.argmax(f_exp)] += difference  # difference is negative
-
-                    # Combine bins with expected frequencies <5
-                    while np.any(f_exp < 5) and len(f_exp) > 1:
-                        # Find the bin with the smallest expected frequency
-                        min_bin = np.argmin(f_exp)
-                        if min_bin == 0:
-                            f_exp[1] += f_exp[0]
-                        else:
-                            f_exp[min_bin - 1] += f_exp[min_bin]
-                        # Remove the bin
-                        f_exp = np.delete(f_exp, min_bin)
-
-                    # Recheck if any expected frequencies are still <5
-                    if np.any(f_exp < 5):
-                        st.warning("Some expected frequencies are still less than 5 after combining bins. Chi-square test may not be valid.")
-
-                    # Perform Chi-square test
-                    chi2_stat, p_val = chisquare(f_obs=sim_hist, f_exp=f_exp)
-
-                    chi2_results = {
-                        "Chi-square Statistic": round(chi2_stat, 2),
-                        "P-value": round(p_val, 4)
-                    }
-
-                    chi2_df = pd.DataFrame(chi2_results, index=[0])
-
-                    st.table(chi2_df)
-        except Exception as e:
-            st.error(f"An error occurred during the Chi-square Test: {e}")
-
-        # Data Mean Comparison
-        st.subheader("Data Mean Comparison")
-        try:
-            # Calculate mean wait time and service time from data
-            data_mean_wait = data['wait_time'].mean()
-            data_mean_service = data['service_time'].mean()
-
-            # Check if data_mean_wait or data_mean_service is NaN
-            if np.isnan(data_mean_wait) or np.isnan(data_mean_service):
-                st.error("Cannot compute mean wait_time or service_time from the data.")
-            else:
-                # Simulation mean wait time and service time from metrics
-                sim_mean_wait = st.session_state.metrics.get("System Wq (Avg Wait Time)", 0)
-                sim_mean_service = st.session_state.metrics.get("System W (Avg Time in System)", 0)
-
-                comparison_df = pd.DataFrame({
-                    "Metric": ["Average Wait Time (minutes)", "Average Service Time (minutes)"],
-                    "Simulation": [round(sim_mean_wait, 2), round(sim_mean_service, 2)],
-                    "Real Data": [round(data_mean_wait, 2), round(data_mean_service, 2)]
-                })
-
-                st.table(comparison_df)
-
-                # Visualization of Mean Comparison
-                fig_comparison = px.bar(
-                    comparison_df.melt(id_vars="Metric", var_name="Source", value_name="Value"),
-                    x="Metric",
-                    y="Value",
-                    color="Source",
-                    barmode='group',
-                    title="Comparison of Average Times"
+            if gantt_data:
+                df_gantt = pd.DataFrame(gantt_data)
+                fig_gantt = px.timeline(
+                    df_gantt, 
+                    x_start='Start', 
+                    x_end='Finish', 
+                    y='Resource', 
+                    color='Resource', 
+                    hover_name='Task',
+                    title='Gantt Chart of Customer Service'
                 )
-                st.plotly_chart(fig_comparison, use_container_width=True)
+                fig_gantt.update_yaxes(categoryorder='total ascending')
+                fig_gantt.update_layout(
+                    xaxis_title="Time",
+                    yaxis_title="Server",
+                    title="Gantt Chart of Customer Service",
+                    showlegend=False
+                )
+                # Use a separate container to prevent resetting the app
+                with st.container():
+                    st.plotly_chart(fig_gantt, use_container_width=True)
+            else:
+                st.write("No data available for Gantt Chart.")
         except Exception as e:
-            st.error(f"An error occurred during Data Mean Comparison: {e}")
+            st.error(f"An error occurred while generating the Gantt Chart: {e}")
+
+    # Chi-square Test
+    st.subheader("Chi-square Test")
+    try:
+        # Define number of bins
+        num_bins = 10
+
+        # Create histograms
+        sim_hist, bin_edges = np.histogram(st.session_state.service_times_sim, bins=num_bins)
+        data_service_times = data['service_time'].dropna()
+        data_hist, _ = np.histogram(data_service_times, bins=bin_edges)
+
+        # Check if data_hist.sum() is zero
+        if data_hist.sum() == 0:
+            st.error("No service time data available for Chi-square Test.")
+        else:
+            # Scale data_hist to have the same total as sim_hist
+            scale_factor = sim_hist.sum() / data_hist.sum()
+            f_exp = data_hist * scale_factor
+
+            # Round f_exp to nearest integer
+            f_exp = np.round(f_exp).astype(int)
+
+            # Adjust the difference to make sums equal
+            difference = sim_hist.sum() - f_exp.sum()
+            if difference > 0:
+                # Add the difference to the bin with the highest expected frequency
+                f_exp[np.argmax(f_exp)] += difference
+            elif difference < 0:
+                # Subtract the difference from the bin with the highest expected frequency
+                f_exp[np.argmax(f_exp)] += difference  # difference is negative
+
+            # Check for expected frequencies <5
+            if np.any(f_exp < 5):
+                st.warning("Some expected frequencies are less than 5. Chi-square test may not be valid.")
+
+            # Ensure that the sums match exactly
+            if f_exp.sum() != sim_hist.sum():
+                st.warning("Observed and expected frequencies do not sum to the same total after scaling.")
+
+            # Perform Chi-square test
+            chi2_stat, p_val = chisquare(f_obs=sim_hist, f_exp=f_exp)
+
+            chi2_results = {
+                "Chi-square Statistic": round(chi2_stat, 2),
+                "P-value": round(p_val, 4)
+            }
+
+            chi2_df = pd.DataFrame(chi2_results, index=[0])
+
+            st.table(chi2_df)
+    except Exception as e:
+        st.error(f"An error occurred during the Chi-square Test: {e}")
+
+    # Data Mean Comparison
+    st.subheader("Data Mean Comparison")
+    try:
+        # Calculate mean wait time and service time from data
+        data_mean_wait = data['wait_time'].mean()
+        data_mean_service = data['service_time'].mean()
+
+        # Check if data_mean_wait or data_mean_service is NaN
+        if np.isnan(data_mean_wait) or np.isnan(data_mean_service):
+            st.error("Cannot compute mean wait_time or service_time from the data.")
+        else:
+            # Simulation mean wait time and service time from metrics
+            sim_mean_wait = st.session_state.metrics.get("System Wq (Avg Wait Time)", 0)
+            sim_mean_service = st.session_state.metrics.get("System W (Avg Time in System)", 0)
+
+            comparison_df = pd.DataFrame({
+                "Metric": ["Average Wait Time (minutes)", "Average Service Time (minutes)"],
+                "Simulation": [round(sim_mean_wait, 2), round(sim_mean_service, 2)],
+                "Real Data": [round(data_mean_wait, 2), round(data_mean_service, 2)]
+            })
+
+            st.table(comparison_df)
+
+            # Visualization of Mean Comparison
+            fig_comparison = px.bar(
+                comparison_df.melt(id_vars="Metric", var_name="Source", value_name="Value"),
+                x="Metric",
+                y="Value",
+                color="Source",
+                barmode='group',
+                title="Comparison of Average Times"
+            )
+            st.plotly_chart(fig_comparison, use_container_width=True)
+    except Exception as e:
+        st.error(f"An error occurred during Data Mean Comparison: {e}")
 
 else:
     st.write("Adjust the simulation parameters in the sidebar and click 'Run Simulation'.")
