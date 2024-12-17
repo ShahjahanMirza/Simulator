@@ -515,4 +515,5 @@ else:
 # Display Original Data (Optional)
 if st.checkbox("Show Original POS Data"):
     st.subheader("POS Customer Data")
-    st.dataframe(data)
+
+    st.dataframe(data[[customer_id, arrival_time, service_start, service_end, waiting_time, total_time]])
