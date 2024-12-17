@@ -7,28 +7,12 @@ import seaborn as sns
 import plotly.express as px
 from scipy.stats import chisquare
 from datetime import datetime, timedelta
-from io import BytesIO
-
-# Ensure that openpyxl is installed for Excel operations
-# You can install it using: pip install openpyxl
 
 # Set Streamlit page configuration
 st.set_page_config(page_title="Supermarket POS Customer Simulation", layout="wide")
 
 # Title
 st.title("Supermarket POS Customer Simulation")
-
-# Initialize Session State for Simulation Results
-if 'metrics' not in st.session_state:
-    st.session_state.metrics = None
-if 'customers' not in st.session_state:
-    st.session_state.customers = None
-if 'wait_times' not in st.session_state:
-    st.session_state.wait_times = None
-if 'service_times_sim' not in st.session_state:
-    st.session_state.service_times_sim = None
-if 'total_times' not in st.session_state:
-    st.session_state.total_times = None
 
 # Load Data
 @st.cache_data
@@ -62,8 +46,7 @@ def load_data():
             st.stop()
 
     # Calculate service_time and wait_time in data
-    required_columns = ['service start', 'service end', 'arrival']
-    if all(col in data.columns for col in required_columns):
+    if all(col in data.columns for col in ['service start', 'service end', 'arrival']):
         data['service_time'] = (data['service end'] - data['service start']).dt.total_seconds() / 60
         data['wait_time'] = (data['service start'] - data['arrival']).dt.total_seconds() / 60
 
@@ -137,9 +120,6 @@ elif arrival_dist_choice == "Uniform":
         step=0.1,
         key="arrival_high_uniform"
     )
-    # Validation: Ensure High > Low
-    if arrival_high <= arrival_low:
-        st.sidebar.error("High must be greater than Low for Uniform Distribution.")
 elif arrival_dist_choice == "Normal":
     arrival_mu = st.sidebar.number_input(
         "Mean (μ)", 
@@ -190,9 +170,6 @@ elif service_dist_choice == "Uniform":
         step=0.1,
         key="service_high_uniform"
     )
-    # Validation: Ensure High > Low
-    if service_high <= service_low:
-        st.sidebar.error("High must be greater than Low for Uniform Distribution.")
 elif service_dist_choice == "Normal":
     service_mu = st.sidebar.number_input(
         "Mean (μ)", 
@@ -216,7 +193,7 @@ sim_time = st.sidebar.number_input(
     "Total Simulation Time (minutes)", 
     min_value=10, 
     max_value=1000, 
-    value=10,  # Adjusted to 10 as per user parameters
+    value=60, 
     step=10,
     key="simulation_time"
 )
@@ -253,15 +230,14 @@ class Customer:
         self.service_time = 0
         self.start_time = 0
         self.end_time = 0
-        self.arrival_time = 0  # New attribute to store arrival time
 
     def process(self):
-        self.arrival_time = self.env.now  # Record arrival time
+        arrival_time = self.env.now
         # Request a server by getting a server ID from the store
         server_id = yield self.server_store.get()
         self.server_id = server_id
         self.start_time = self.env.now
-        self.wait_time = self.start_time - self.arrival_time
+        self.wait_time = self.start_time - arrival_time
         service_time = get_service_time()
         self.service_time = service_time
         # Simulate service time
@@ -308,6 +284,9 @@ def run_simulation():
     # Run the simulation
     env.run()
 
+    # Capture the total simulation time
+    total_simulation_time = env.now
+
     # Collect Metrics
     wait_times = [c.wait_time for c in customers]
     service_times_sim = [c.service_time for c in customers]
@@ -315,7 +294,7 @@ def run_simulation():
 
     # Server Utilization
     total_busy_time = sum(service_times_sim)
-    utilization = (total_busy_time) / (num_servers * total_simulation_time) * 100
+    utilization = (total_busy_time) / (num_servers * total_simulation_time) * 100  # Corrected Calculation
 
     # Metrics Calculation
     system_efficiency = utilization
@@ -324,7 +303,7 @@ def run_simulation():
     Lq = sum(wait_times) / total_simulation_time  # Average queue length
     W = np.mean(total_times) if total_times else 0  # Average time in system
     Wq = np.mean(wait_times) if wait_times else 0  # Average wait time
-    arrival_rate = len(customers) / sim_time  # λ
+    arrival_rate = len(customers) / sim_time  # λ (arrival rate based on arrival period)
     service_rate = len(customers) / sum(service_times_sim) if sum(service_times_sim) > 0 else 0  # μ
     overall_utilization = utilization / 100
     total_customers_served = len(customers)
@@ -341,101 +320,28 @@ def run_simulation():
         "System μ (Service Rate)": round(service_rate, 2),
         "System ρ (Overall Utilization)": round(overall_utilization, 2),
         "Total Customers Served": total_customers_served,
-        "Total Servers": total_servers
+        "Total Servers": total_servers,
+        "Total Simulation Time (minutes)": round(total_simulation_time, 2)  # Added for clarity
     }
 
     return metrics, wait_times, service_times_sim, total_times, customers
-
-# Function to save customer data to Excel
-def save_customer_data(customers):
-    # Prepare data
-    customer_records = []
-    for c in customers:
-        record = {
-            "Name": c.name,
-            "Server ID": c.server_id,
-            "Arrival Time (min)": round(c.arrival_time, 2),
-            "Service Start Time (min)": round(c.start_time, 2),
-            "Service End Time (min)": round(c.end_time, 2),
-            "Wait Time (min)": round(c.wait_time, 2),
-            "Service Time (min)": round(c.service_time, 2)
-        }
-        customer_records.append(record)
-
-    df_customers = pd.DataFrame(customer_records)
-
-    # Generate filename with current datetime
-    current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"customer_data_{current_datetime}.xlsx"
-
-    # Save to Excel
-    try:
-        df_customers.to_excel(filename, index=False)
-        st.success(f"Customer data successfully saved to '{filename}'!")
-    except Exception as e:
-        st.error(f"An error occurred while saving the Excel file: {e}")
 
 # Run Simulation and Display Results
 if run_sim:
     with st.spinner("Running simulation..."):
         metrics, wait_times, service_times_sim, total_times, customers = run_simulation()
-        # Store simulation results in session_state
-        st.session_state.metrics = metrics
-        st.session_state.wait_times = wait_times
-        st.session_state.service_times_sim = service_times_sim
-        st.session_state.total_times = total_times
-        st.session_state.customers = customers
     st.success("Simulation Completed!")
 
-    # Save Customer Data to Excel
-    save_customer_data(customers)
-
-    # Prepare data for download
-    try:
-        # Combine all customer data into a DataFrame
-        customer_records = []
-        for c in st.session_state.customers:
-            record = {
-                "Name": c.name,
-                "Server ID": c.server_id,
-                "Arrival Time (min)": round(c.arrival_time, 2),
-                "Service Start Time (min)": round(c.start_time, 2),
-                "Service End Time (min)": round(c.end_time, 2),
-                "Wait Time (min)": round(c.wait_time, 2),
-                "Service Time (min)": round(c.service_time, 2)
-            }
-            customer_records.append(record)
-
-        df_customers = pd.DataFrame(customer_records)
-
-        # Convert DataFrame to Excel in memory
-        output = BytesIO()
-        df_customers.to_excel(output, index=False)
-        excel_data = output.getvalue()
-
-        # Generate download button with current datetime in filename
-        download_filename = f"customer_data_{current_datetime}.xlsx"
-
-        st.download_button(
-            label="Download Customer Data as Excel",
-            data=excel_data,
-            file_name=download_filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    except Exception as e:
-        st.error(f"An error occurred while preparing the download: {e}")
-
-# Display Metrics if available
-if st.session_state.metrics:
+    # Display Metrics
     st.subheader("Simulation Metrics")
-    metrics_df = pd.DataFrame(st.session_state.metrics.items(), columns=["Metric", "Value"])
+    metrics_df = pd.DataFrame(metrics.items(), columns=["Metric", "Value"])
     st.table(metrics_df)
 
     # Utilization Graph
     st.subheader("Service Time Distribution (Simulation)")
-    if st.session_state.service_times_sim:
+    if service_times_sim:
         fig, ax = plt.subplots(figsize=(10, 4))
-        sns.histplot(st.session_state.service_times_sim, bins=20, kde=True, ax=ax, color='skyblue')
+        sns.histplot(service_times_sim, bins=20, kde=True, ax=ax, color='skyblue')
         ax.set_xlabel("Service Time (minutes)")
         ax.set_ylabel("Frequency")
         ax.set_title("Service Time Distribution (Simulation)")
@@ -450,7 +356,7 @@ if st.session_state.metrics:
         try:
             gantt_data = []
             base_time = datetime(2024, 1, 1, 8, 0, 0)  # Arbitrary base time
-            for c in st.session_state.customers:
+            for c in customers:
                 # Ensure that start_time and end_time are valid
                 if c.end_time >= c.start_time:
                     start_time = base_time + timedelta(minutes=c.start_time)
@@ -495,7 +401,7 @@ if st.session_state.metrics:
         num_bins = 10
 
         # Create histograms
-        sim_hist, bin_edges = np.histogram(st.session_state.service_times_sim, bins=num_bins)
+        sim_hist, bin_edges = np.histogram(service_times_sim, bins=num_bins)
         data_service_times = data['service_time'].dropna()
         data_hist, _ = np.histogram(data_service_times, bins=bin_edges)
 
@@ -553,8 +459,8 @@ if st.session_state.metrics:
             st.error("Cannot compute mean wait_time or service_time from the data.")
         else:
             # Simulation mean wait time and service time from metrics
-            sim_mean_wait = st.session_state.metrics.get("System Wq (Avg Wait Time)", 0)
-            sim_mean_service = st.session_state.metrics.get("System W (Avg Time in System)", 0)
+            sim_mean_wait = metrics.get("System Wq (Avg Wait Time)", 0)
+            sim_mean_service = metrics.get("System W (Avg Time in System)", 0)
 
             comparison_df = pd.DataFrame({
                 "Metric": ["Average Wait Time (minutes)", "Average Service Time (minutes)"],
