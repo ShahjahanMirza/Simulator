@@ -213,7 +213,7 @@ elif service_dist_choice == "Normal":
 
 # 5. Simulation Time
 sim_time = st.sidebar.number_input(
-    "Total Simulation Time (minutes)": round(total_simulation_time, 2), 
+    "Total Simulation Time (minutes)", 
     min_value=10, 
     max_value=1000, 
     value=10,  # Adjusted to 10 as per user parameters
