@@ -5,7 +5,7 @@ import simpy
 import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
-from scipy.stats import chisquare
+# from scipy.stats import chisquare # Removed as the test section is deleted
 from datetime import datetime, timedelta
 
 # Set Streamlit page configuration
@@ -30,9 +30,10 @@ if 'total_times' not in st.session_state:
 @st.cache_data
 def load_data():
     try:
-        data = pd.read_csv("./pos_data.csv")
+        # Read from the cleaned data file
+        data = pd.read_csv("./data_cleaned.csv") 
     except FileNotFoundError:
-        st.error("The file './pos_data.csv' was not found.")
+        st.error("The file './data_cleaned.csv' was not found.")
         st.stop()
     except Exception as e:
         st.error(f"An error occurred while reading the data: {e}")
@@ -419,59 +420,6 @@ if st.session_state.metrics:
                 st.write("No data available for Gantt Chart.")
         except Exception as e:
             st.error(f"An error occurred while generating the Gantt Chart: {e}")
-
-    # Chi-square Test
-    st.subheader("Chi-square Test")
-    try:
-        # Define number of bins
-        num_bins = 10
-
-        # Create histograms
-        sim_hist, bin_edges = np.histogram(st.session_state.service_times_sim, bins=num_bins)
-        data_service_times = data['service_time'].dropna()
-        data_hist, _ = np.histogram(data_service_times, bins=bin_edges)
-
-        # Check if data_hist.sum() is zero
-        if data_hist.sum() == 0:
-            st.error("No service time data available for Chi-square Test.")
-        else:
-            # Scale data_hist to have the same total as sim_hist
-            scale_factor = sim_hist.sum() / data_hist.sum()
-            f_exp = data_hist * scale_factor
-
-            # Round f_exp to nearest integer
-            f_exp = np.round(f_exp).astype(int)
-
-            # Adjust the difference to make sums equal
-            difference = sim_hist.sum() - f_exp.sum()
-            if difference > 0:
-                # Add the difference to the bin with the highest expected frequency
-                f_exp[np.argmax(f_exp)] += difference
-            elif difference < 0:
-                # Subtract the difference from the bin with the highest expected frequency
-                f_exp[np.argmax(f_exp)] += difference  # difference is negative
-
-            # Check for expected frequencies <5
-            if np.any(f_exp < 5):
-                st.warning("Some expected frequencies are less than 5. Chi-square test may not be valid.")
-
-            # Ensure that the sums match exactly
-            if f_exp.sum() != sim_hist.sum():
-                st.warning("Observed and expected frequencies do not sum to the same total after scaling.")
-
-            # Perform Chi-square test
-            chi2_stat, p_val = chisquare(f_obs=sim_hist, f_exp=f_exp)
-
-            chi2_results = {
-                "Chi-square Statistic": round(chi2_stat, 2),
-                "P-value": round(p_val, 4)
-            }
-
-            chi2_df = pd.DataFrame(chi2_results, index=[0])
-
-            st.table(chi2_df)
-    except Exception as e:
-        st.error(f"An error occurred during the Chi-square Test: {e}")
 
     # Data Mean Comparison
     st.subheader("Data Mean Comparison")
