@@ -88,6 +88,9 @@ data = load_data()
 #st.subheader("Processed POS Data (First 5 Rows)")
 #st.write(data.head())
 
+# Link to Queuing Calculator
+st.write("For theoretical calculations, visit the [Queuing Calculator](https://queuecalculatorpy-ao7p8tvwtb32x5ndcbm7pc.streamlit.app/).")
+
 # Sidebar for Simulation Parameters
 st.sidebar.header("Simulation Parameters")
 
